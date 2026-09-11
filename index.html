@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tegaki.svg（仮）| 手書き文字を、1文字ずつSVGに。</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/imagetracerjs/1.2.6/imagetracer_v1.2.6.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --ink:#111417;
+    --paper:#ffffff;
+    --line:#e3e6ea;
+    --accent:#39435a;   /* ブルーグレー */
+    --accent-soft:#eef0f4;
+    --muted:#8a919c;
+    --danger:#b23b3b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.7;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 24px 120px;}
+  header{
+    display:flex;justify-content:space-between;align-items:baseline;
+    border-bottom:1px solid var(--line);
+    padding-bottom:20px;margin-bottom:36px;
+  }
+  header h1{
+    font-size:22px;letter-spacing:0.02em;margin:0;font-weight:600;
+  }
+  header p{margin:4px 0 0;color:var(--muted);font-size:13px;}
+  .privacy{
+    font-size:12px;color:var(--muted);background:var(--accent-soft);
+    padding:8px 14px;border-radius:6px;display:inline-block;margin-bottom:32px;
+  }
+  section{margin-bottom:48px;}
+  .step-label{
+    font-size:12px;color:var(--muted);margin-bottom:6px;
+  }
+  h2{font-size:16px;margin:0 0 16px;font-weight:600;}
+
+  #dropzone{
+    border:1.5px dashed var(--line);
+    border-radius:10px;
+    padding:48px 20px;
+    text-align:center;
+    color:var(--muted);
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  #dropzone.drag{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);}
+  #dropzone input{display:none;}
+
+  .preview-row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;}
+  .preview-box{
+    border:1px solid var(--line);border-radius:8px;padding:12px;
+    background:#fafbfc;
+  }
+  .preview-box canvas{max-width:100%;display:block;border-radius:4px;}
+  .preview-box .cap{font-size:12px;color:var(--muted);margin-top:8px;}
+
+  .controls{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:20px;margin-top:20px;padding:20px;border:1px solid var(--line);border-radius:8px;
+  }
+  .control label{
+    display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;color:var(--ink);
+  }
+  .control span{color:var(--muted);font-variant-numeric:tabular-nums;}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+
+  .actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;}
+  button{
+    font-family:inherit;font-size:13px;border-radius:6px;border:1px solid var(--line);
+    background:var(--paper);color:var(--ink);padding:9px 16px;cursor:pointer;
+    transition:background .15s,border-color .15s;
+  }
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  button.primary:hover{background:#2c3446;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+
+  #grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    gap:14px;margin-top:20px;
+  }
+  .card{
+    border:1px solid var(--line);border-radius:8px;padding:10px;background:#fafbfc;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .card .thumb{
+    background:#fff;border:1px solid var(--line);border-radius:6px;
+    aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  }
+  .card .thumb svg{width:80%;height:80%;}
+  .card .meta{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;}
+  .card button{font-size:11px;padding:6px 8px;}
+  .card .remove{color:var(--danger);border-color:var(--danger);}
+
+  .msg{font-size:13px;padding:10px 14px;border-radius:6px;margin-top:12px;}
+  .msg.error{background:#fdecec;color:var(--danger);}
+  .msg.info{background:var(--accent-soft);color:var(--accent);}
+  footer{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>tegaki.svg <span style="color:var(--muted);font-weight:400;">（仮）</span></h1>
+      <p>手書き文字を、1文字ずつSVGに。</p>
+    </div>
+  </header>
+
+  <div class="privacy">画像はサーバーへ送信されません。すべてブラウザ内で処理されます。</div>
+
+  <section>
+    <div class="step-label">STEP 1</div>
+    <h2>画像をアップロード</h2>
+    <div id="dropzone">
+      画像をここにドロップ、またはクリックして選択（PNG / JPG / JPEG）
+      <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp">
+    </div>
+    <div id="uploadMsg"></div>
+  </section>
+
+  <section id="detectSection" style="display:none;">
+    <div class="step-label">STEP 2</div>
+    <h2>文字検出を調整</h2>
+    <div class="preview-row">
+      <div class="preview-box">
+        <canvas id="srcCanvas"></canvas>
+        <div class="cap">元画像</div>
+      </div>
+      <div class="preview-box">
+        <canvas id="detectCanvas"></canvas>
+        <div class="cap">検出結果（枠線＋番号）</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="control">
+        <label>Threshold <span id="thVal"></span></label>
+        <input type="range" id="thRange" min="-60" max="60" value="0">
+      </div>
+      <div class="control">
+        <label>Noise 除去 <span id="noiseVal"></span></label>
+        <input type="range" id="noiseRange" min="0" max="200" value="20">
+      </div>
+      <div class="control">
+        <label>Merge 感度 <span id="mergeVal"></span></label>
+        <input type="range" id="mergeRange" min="0" max="100" value="30">
+      </div>
+      <div class="control">
+        <label>Smooth（パス滑らかさ） <span id="smoothVal"></span></label>
+        <input type="range" id="smoothRange" min="0" max="100" value="40">
+      </div>
+      <div class="control">
+        <label>余白 Padding <span id="padVal"></span></label>
+        <input type="range" id="padRange" min="0" max="30" value="10">
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="redetectBtn">再検出</button>
+      <button id="clearSelBtn">選択削除（クリックした枠を除外）</button>
+      <button class="primary" id="generateBtn">SVGを生成する →</button>
+    </div>
+    <div id="detectMsg"></div>
+  </section>
+
+  <section id="resultSection" style="display:none;">
+    <div class="step-label">STEP 3 / 4</div>
+    <h2>SVGを確認 &amp; ダウンロード</h2>
+    <div class="actions">
+      <button class="primary" id="zipBtn">すべてZIPで保存</button>
+      <span id="countLabel" style="align-self:center;font-size:12px;color:var(--muted);"></span>
+    </div>
+    <div id="grid"></div>
+  </section>
+
+  <footer>tegaki.svg — MVP / ブラウザ内完結・AI API不使用</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- state ----------
+  let srcCanvas = document.getElementById('srcCanvas');
+  let detectCanvas = document.getElementById('detectCanvas');
+  let originalImage = null;       // HTMLImageElement
+  let workCanvas = null;          // downscaled working canvas (for detection)
+  let workCtx = null;
+  let grayData = null;            // Uint8ClampedArray grayscale, length w*h
+  let workW = 0, workH = 0;
+  let boxes = [];                 // final grouped boxes: {x,y,w,h,excluded}
+  let generatedChars = [];        // {svg, index}
+
+  const fileInput = document.getElementById('fileInput');
+  const dropzone = document.getElementById('dropzone');
+  const uploadMsg = document.getElementById('uploadMsg');
+  const detectSection = document.getElementById('detectSection');
+  const resultSection = document.getElementById('resultSection');
+  const detectMsg = document.getElementById('detectMsg');
+
+  const thRange = document.getElementById('thRange');
+  const noiseRange = document.getElementById('noiseRange');
+  const mergeRange = document.getElementById('mergeRange');
+  const smoothRange = document.getElementById('smoothRange');
+  const padRange = document.getElementById('padRange');
+  const thVal = document.getElementById('thVal');
+  const noiseVal = document.getElementById('noiseVal');
+  const mergeVal = document.getElementById('mergeVal');
+  const smoothVal = document.getElementById('smoothVal');
+  const padVal = document.getElementById('padVal');
+
+  function syncLabels(){
+    thVal.textContent = thRange.value;
+    noiseVal.textContent = noiseRange.value;
+    mergeVal.textContent = mergeRange.value;
+    smoothVal.textContent = smoothRange.value;
+    padVal.textContent = padRange.value + '%';
+  }
+  [thRange, noiseRange, mergeRange, smoothRange, padRange].forEach(el=>{
+    el.addEventListener('input', syncLabels);
+  });
+  syncLabels();
+
+  function showMsg(container, text, type){
+    container.innerHTML = '<div class="msg '+(type||'info')+'">'+text+'</div>';
+  }
+  function clearMsg(container){ container.innerHTML=''; }
+
+  // ---------- upload ----------
+  dropzone.addEventListener('click', ()=>fileInput.click());
+  dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
+  dropzone.addEventListener('dragleave', ()=>dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e=>{
+    e.preventDefault(); dropzone.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e=>{
+    if(e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file){
+    clearMsg(uploadMsg);
+    if(!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)){
+      showMsg(uploadMsg, '対応していないファイル形式です。PNG / JPG / JPEG / WebPを使ってください。', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      const img = new Image();
+      img.onload = ()=>{
+        originalImage = img;
+        prepareWorkCanvas(img);
+        detectSection.style.display = 'block';
+        resultSection.style.display = 'none';
+        runDetection();
+      };
+      img.onerror = ()=> showMsg(uploadMsg, '画像が読み込めませんでした。別のファイルをお試しください。', 'error');
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function prepareWorkCanvas(img){
+    const MAX = 2048;
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, MAX / Math.max(w,h));
+    w = Math.round(w*scale); h = Math.round(h*scale);
+    workCanvas = document.createElement('canvas');
+    workCanvas.width = w; workCanvas.height = h;
+    workCtx = workCanvas.getContext('2d', {willReadFrequently:true});
+    workCtx.drawImage(img, 0, 0, w, h);
+    workW = w; workH = h;
+
+    // draw source preview (scaled to fit display width)
+    const dispScale = Math.min(1, 480/w);
+    srcCanvas.width = w*dispScale; srcCanvas.height = h*dispScale;
+    srcCanvas.getContext('2d').drawImage(img, 0, 0, srcCanvas.width, srcCanvas.height);
+
+    // grayscale
+    const imgData = workCtx.getImageData(0,0,w,h).data;
+    grayData = new Uint8ClampedArray(w*h);
+    for(let i=0, p=0; i<imgData.length; i+=4, p++){
+      grayData[p] = (imgData[i]*0.299 + imgData[i+1]*0.587 + imgData[i+2]*0.114) | 0;
+    }
+  }
+
+  // ---------- Otsu threshold ----------
+  function otsuThreshold(gray){
+    const hist = new Array(256).fill(0);
+    for(let i=0;i<gray.length;i++) hist[gray[i]]++;
+    const total = gray.length;
+    let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
+    let sumB=0, wB=0, wF=0, maxVar=0, threshold=128;
+    for(let t=0;t<256;t++){
+      wB += hist[t]; if(wB===0) continue;
+      wF = total - wB; if(wF===0) break;
+      sumB += t*hist[t];
+      const mB = sumB/wB, mF=(sum-sumB)/wF;
+      const varBetween = wB*wF*(mB-mF)*(mB-mF);
+      if(varBetween > maxVar){ maxVar = varBetween; threshold = t; }
+    }
+    return threshold;
+  }
+
+  // ---------- connected components (BFS, 8-connectivity) ----------
+  function findComponents(binary, w, h){
+    const visited = new Uint8Array(w*h);
+    const comps = [];
+    const stack = new Int32Array(w*h);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx = y*w+x;
+        if(binary[idx] && !visited[idx]){
+          let sp=0;
+          stack[sp++]=idx; visited[idx]=1;
+          let minX=x,maxX=x,minY=y,maxY=y,count=0;
+          while(sp>0){
+            const cur = stack[--sp];
+            const cx = cur % w, cy = (cur/w)|0;
+            count++;
+            if(cx<minX)minX=cx; if(cx>maxX)maxX=cx;
+            if(cy<minY)minY=cy; if(cy>maxY)maxY=cy;
+            for(let dy=-1;dy<=1;dy++){
+              for(let dx=-1;dx<=1;dx++){
+                if(dx===0&&dy===0) continue;
+                const nx=cx+dx, ny=cy+dy;
+                if(nx<0||ny<0||nx>=w||ny>=h) continue;
+                const nidx = ny*w+nx;
+                if(binary[nidx] && !visited[nidx]){
+                  visited[nidx]=1; stack[sp++]=nidx;
+                }
+              }
+            }
+          }
+          comps.push({x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1,area:count});
+        }
+      }
+    }
+    return comps;
+  }
+
+  // ---------- union-find merge based on proximity ----------
+  function mergeBoxes(comps, mergeDist){
+    const n = comps.length;
+    const parent = Array.from({length:n}, (_,i)=>i);
+    function find(a){ while(parent[a]!==a){ parent[a]=parent[parent[a]]; a=parent[a]; } return a; }
+    function union(a,b){ a=find(a); b=find(b); if(a!==b) parent[a]=b; }
+
+    function gap(a,b){
+      const ax2=a.x+a.w, ay2=a.y+a.h, bx2=b.x+b.w, by2=b.y+b.h;
+      const dx = Math.max(a.x-bx2, b.x-ax2, 0);
+      const dy = Math.max(a.y-by2, b.y-ay2, 0);
+      return Math.hypot(dx,dy);
+    }
+
+    // reference size = median char box dimension, so mergeDist scales with handwriting size
+    const sizes = comps.map(c=>Math.max(c.w,c.h)).sort((a,b)=>a-b);
+    const medSize = sizes.length ? sizes[Math.floor(sizes.length/2)] : 20;
+    const threshold = (mergeDist/100) * medSize * 0.9;
+
+    for(let i=0;i<n;i++){
+      for(let j=i+1;j<n;j++){
+        if(gap(comps[i], comps[j]) <= threshold) union(i,j);
+      }
+    }
+    const groups = {};
+    for(let i=0;i<n;i++){
+      const r = find(i);
+      if(!groups[r]) groups[r] = [];
+      groups[r].push(comps[i]);
+    }
+    return Object.values(groups).map(members=>{
+      const x = Math.min(...members.map(m=>m.x));
+      const y = Math.min(...members.map(m=>m.y));
+      const x2 = Math.max(...members.map(m=>m.x+m.w));
+      const y2 = Math.max(...members.map(m=>m.y+m.h));
+      return {x,y,w:x2-x,h:y2-y,area:members.reduce((s,m)=>s+m.area,0)};
+    });
+  }
+
+  // ---------- reading order (rows: top->bottom, within row: left->right) ----------
+  function orderBoxes(bx){
+    const sorted = bx.slice().sort((a,b)=>a.y-b.y);
+    const rows = [];
+    sorted.forEach(box=>{
+      const cy = box.y + box.h/2;
+      let row = rows.find(r => cy >= r.top && cy <= r.bottom);
+      if(!row){
+        row = {top: box.y, bottom: box.y+box.h, items:[]};
+        rows.push(row);
+      } else {
+        row.top = Math.min(row.top, box.y);
+        row.bottom = Math.max(row.bottom, box.y+box.h);
+      }
+      row.items.push(box);
+    });
+    rows.sort((a,b)=>a.top-b.top);
+    const result = [];
+    rows.forEach(r=>{
+      r.items.sort((a,b)=>a.x-b.x);
+      result.push(...r.items);
+    });
+    return result;
+  }
+
+  // ---------- run full detection pipeline ----------
+  function runDetection(){
+    clearMsg(detectMsg);
+    if(!grayData){ return; }
+    const otsu = otsuThreshold(grayData);
+    const th = Math.max(1, Math.min(254, otsu + parseInt(thRange.value,10)));
+
+    const binary = new Uint8Array(workW*workH);
+    for(let i=0;i<grayData.length;i++) binary[i] = grayData[i] < th ? 1 : 0;
+
+    let comps = findComponents(binary, workW, workH);
+    const noiseArea = parseInt(noiseRange.value,10);
+    comps = comps.filter(c => c.area > noiseArea);
+
+    if(comps.length === 0){
+      showMsg(detectMsg, '文字を検出できませんでした。ThresholdまたはNoiseを調整してください。', 'error');
+      boxes = [];
+      drawDetectOverlay();
+      return;
+    }
+
+    let merged = mergeBoxes(comps, parseInt(mergeRange.value,10));
+    merged = orderBoxes(merged);
+    boxes = merged.map((b,i)=>({...b, excluded:false, idx:i}));
+    drawDetectOverlay();
+  }
+
+  function drawDetectOverlay(){
+    const dispScale = Math.min(1, 480/workW);
+    detectCanvas.width = workW*dispScale;
+    detectCanvas.height = workH*dispScale;
+    const ctx = detectCanvas.getContext('2d');
+    ctx.drawImage(workCanvas, 0,0, detectCanvas.width, detectCanvas.height);
+    ctx.lineWidth = 1.5;
+    ctx.font = '11px sans-serif';
+    boxes.forEach((b, i)=>{
+      const x=b.x*dispScale, y=b.y*dispScale, w=b.w*dispScale, h=b.h*dispScale;
+      ctx.strokeStyle = b.excluded ? '#c9cdd3' : '#39435a';
+      ctx.strokeRect(x,y,w,h);
+      ctx.fillStyle = b.excluded ? '#c9cdd3' : '#39435a';
+      const label = String(i+1).padStart(2,'0');
+      ctx.fillRect(x, y-14, 20, 14);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, x+2, y-3);
+    });
+  }
+
+  // click on detect canvas to toggle exclude
+  detectCanvas.addEventListener('click', e=>{
+    const rect = detectCanvas.getBoundingClientRect();
+    const scaleX = workW/detectCanvas.width;
+    const scaleY = workH/detectCanvas.height;
+    const mx = (e.clientX-rect.left)*scaleX;
+    const my = (e.clientY-rect.top)*scaleY;
+    for(let i=boxes.length-1;i>=0;i--){
+      const b = boxes[i];
+      if(mx>=b.x && mx<=b.x+b.w && my>=b.y && my<=b.y+b.h){
+        b.excluded = !b.excluded;
+        break;
+      }
+    }
+    drawDetectOverlay();
+  });
+
+  document.getElementById('redetectBtn').addEventListener('click', runDetection);
+  document.getElementById('clearSelBtn').addEventListener('click', ()=>{
+    showMsg(detectMsg, '除外したい枠を検出結果プレビュー上でクリックしてください（グレー＝除外）。', 'info');
+  });
+
+  // ---------- SVG generation ----------
+  function cropToSquareCanvas(box, padPercent, size){
+    // build binary mask canvas for the crop, centered with padding, size x size
+    const out = document.createElement('canvas');
+    out.width = size; out.height = size;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0,0,size,size);
+
+    const pad = padPercent/100;
+    const availW = size*(1-pad*2);
+    const availH = size*(1-pad*2);
+    const scale = Math.min(availW/box.w, availH/box.h);
+    const drawW = box.w*scale, drawH = box.h*scale;
+    const dx = (size-drawW)/2, dy = (size-drawH)/2;
+
+    // recompute binary at current threshold for this crop region directly from grayData
+    const th = Math.max(1, Math.min(254, otsuThreshold(grayData) + parseInt(thRange.value,10)));
+    const crop = document.createElement('canvas');
+    crop.width = box.w; crop.height = box.h;
+    const cctx = crop.getContext('2d');
+    const cImgData = cctx.createImageData(box.w, box.h);
+    for(let yy=0; yy<box.h; yy++){
+      for(let xx=0; xx<box.w; xx++){
+        const gx = box.x+xx, gy = box.y+yy;
+        const gval = grayData[gy*workW+gx];
+        const isInk = gval < th;
+        const p = (yy*box.w+xx)*4;
+        const v = isInk ? 0 : 255;
+        cImgData.data[p]=v; cImgData.data[p+1]=v; cImgData.data[p+2]=v; cImgData.data[p+3]=255;
+      }
+    }
+    cctx.putImageData(cImgData, 0, 0);
+
+    octx.imageSmoothingEnabled = true;
+    octx.drawImage(crop, 0, 0, box.w, box.h, dx, dy, drawW, drawH);
+    return out;
+  }
+
+  function traceCanvasToSVG(canvas, smooth, color){
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.getImageData(0,0,canvas.width, canvas.height);
+    // smooth slider (0-100) -> ltres/qtres (lower = more detail/less smooth)
+    const ltres = 0.2 + (100-smooth)/100*1.8;   // 0.2 (smooth) .. 2.0 (detailed)
+    const qtres = 0.2 + (100-smooth)/100*1.8;
+    const options = {
+      ltres: ltres, qtres: qtres,
+      pathomit: 8,
+      numberofcolors: 2,
+      colorsampling: 0,
+      pal: [ {r:0,g:0,b:0,a:255}, {r:255,g:255,b:255,a:255} ],
+      scale: 1,
+      roundcoords: 1,
+      viewbox: true,
+      desc: false
+    };
+    const svgstring = ImageTracer.imagedataToSVG(imgData, options);
+    return extractInkPath(svgstring, canvas.width, canvas.height, color);
+  }
+
+  function extractInkPath(svgstring, w, h, color){
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgstring, 'image/svg+xml');
+    const paths = Array.from(doc.querySelectorAll('path'));
+    const inkPaths = paths.filter(p=>{
+      const style = (p.getAttribute('style')||'') + (p.getAttribute('fill')||'');
+      return /rgb\(0,\s*0,\s*0\)|#000000|fill:black/i.test(style) || (!/rgb\(255|#fff/i.test(style));
+    });
+    let d = inkPaths.map(p=>p.getAttribute('d')).filter(Boolean).join(' ');
+    if(!d){
+      // fallback: use all paths except pure-white ones
+      d = paths.filter(p=>{
+        const style=(p.getAttribute('style')||'');
+        return !/rgb\(255,\s*255,\s*255\)/i.test(style);
+      }).map(p=>p.getAttribute('d')).join(' ');
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'">'
+      + '<path d="'+d+'" fill="'+color+'"/></svg>';
+  }
+
+  document.getElementById('generateBtn').addEventListener('click', ()=>{
+    const active = boxes.filter(b=>!b.excluded);
+    if(active.length===0){
+      showMsg(detectMsg, '文字を検出できませんでした。ThresholdまたはMergeを調整してください。', 'error');
+      return;
+    }
+    const pad = parseInt(padRange.value,10);
+    const smooth = parseInt(smoothRange.value,10);
+    const color = '#000000';
+    const SIZE = 1000;
+
+    generatedChars = active.map((box, i)=>{
+      const canvas = cropToSquareCanvas(box, pad, SIZE);
+      const svg = traceCanvasToSVG(canvas, smooth, color);
+      return { index: i+1, svg };
+    });
+
+    renderResultGrid();
+    resultSection.style.display = 'block';
+    resultSection.scrollIntoView({behavior:'smooth'});
+  });
+
+  function renderResultGrid(){
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    document.getElementById('countLabel').textContent = generatedChars.length + '文字を検出しました';
+    generatedChars.forEach(item=>{
+      const card = document.createElement('div');
+      card.className = 'card';
+      const fname = 'character_' + String(item.index).padStart(3,'0') + '.svg';
+      card.innerHTML =
+        '<div class="thumb">'+item.svg+'</div>'+
+        '<div class="meta"><span>#'+String(item.index).padStart(3,'0')+'</span><span>'+fname+'</span></div>'+
+        '<button class="dl">SVGを保存</button>';
+      card.querySelector('.dl').addEventListener('click', ()=>downloadSVG(item.svg, fname));
+      grid.appendChild(card);
+    });
+  }
+
+  function downloadSVG(svgString, filename){
+    const blob = new Blob([svgString], {type:'image/svg+xml'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('zipBtn').addEventListener('click', async ()=>{
+    if(generatedChars.length===0) return;
+    const zip = new JSZip();
+    const folder = zip.folder('tegaki-svg');
+    generatedChars.forEach(item=>{
+      const fname = 'character_' + String(item.index).padStart(3,'0') + '.svg';
+      folder.file(fname, item.svg);
+    });
+    const blob = await zip.generateAsync({type:'blob'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'tegaki-svg.zip';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+})();
+</script>
+</body>
+</html>
