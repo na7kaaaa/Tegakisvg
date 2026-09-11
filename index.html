@@ -515,23 +515,27 @@
   });
 
   // ---------- SVG generation ----------
-  function cropToSquareCanvas(box, padPercent, size){
-    // build binary mask canvas for the crop, centered with padding, size x size
+  // Build a small GRAYSCALE (not binarized) crop at native photo resolution, centered
+  // with padding. We deliberately do NOT threshold or pixel-upscale here: doing so
+  // bakes in a blocky pixel staircase that no downstream smoothing can undo. Instead
+  // we hand ImageTracer the real anti-aliased grayscale values and let it find the
+  // ink/background boundary itself, then scale its (sub-pixel, vector) coordinates
+  // up to the 1000-unit canvas — magnifying a curve, not a bitmap.
+  function buildCharacterCrop(box, padPercent){
+    const pad = padPercent/100;
+    const S = Math.min(800, Math.max(40, Math.ceil(Math.max(box.w, box.h) / Math.max(0.05, 1-pad*2))));
+
     const out = document.createElement('canvas');
-    out.width = size; out.height = size;
+    out.width = S; out.height = S;
     const octx = out.getContext('2d');
     octx.fillStyle = '#ffffff';
-    octx.fillRect(0,0,size,size);
+    octx.fillRect(0,0,S,S);
 
-    const pad = padPercent/100;
-    const availW = size*(1-pad*2);
-    const availH = size*(1-pad*2);
+    const availW = S*(1-pad*2), availH = S*(1-pad*2);
     const scale = Math.min(availW/box.w, availH/box.h);
     const drawW = box.w*scale, drawH = box.h*scale;
-    const dx = (size-drawW)/2, dy = (size-drawH)/2;
+    const dx = (S-drawW)/2, dy = (S-drawH)/2;
 
-    // recompute binary at current threshold for this crop region directly from grayData
-    const th = Math.max(1, Math.min(254, otsuThreshold(grayData) + parseInt(thRange.value,10)));
     const crop = document.createElement('canvas');
     crop.width = box.w; crop.height = box.h;
     const cctx = crop.getContext('2d');
@@ -539,21 +543,19 @@
     for(let yy=0; yy<box.h; yy++){
       for(let xx=0; xx<box.w; xx++){
         const gx = box.x+xx, gy = box.y+yy;
-        const gval = grayData[gy*workW+gx];
-        const isInk = gval < th;
+        const v = grayData[gy*workW+gx];
         const p = (yy*box.w+xx)*4;
-        const v = isInk ? 0 : 255;
         cImgData.data[p]=v; cImgData.data[p+1]=v; cImgData.data[p+2]=v; cImgData.data[p+3]=255;
       }
     }
     cctx.putImageData(cImgData, 0, 0);
 
-    octx.imageSmoothingEnabled = false;
+    octx.imageSmoothingEnabled = true;
     octx.drawImage(crop, 0, 0, box.w, box.h, dx, dy, drawW, drawH);
-    return out;
+    return { canvas: out, size: S };
   }
 
-  function traceCanvasToSVG(canvas, smooth, color){
+  function traceCanvasToSVG(canvas, size, smooth, color){
     const ctx = canvas.getContext('2d');
     const imgData = ctx.getImageData(0,0,canvas.width, canvas.height);
     // smooth slider (0-100) -> ltres/qtres (lower = more detail/less smooth)
@@ -561,18 +563,18 @@
     const qtres = 0.2 + (100-smooth)/100*1.8;
     const options = {
       ltres: ltres, qtres: qtres,
-      pathomit: 8,
+      pathomit: 4,
       numberofcolors: 2,
       colorsampling: 0,
-      colorquantcycles: 1,   // keep the supplied black/white palette from drifting toward gray
+      colorquantcycles: 3,     // let ImageTracer's k-means find the true ink/paper split
       pal: [ {r:0,g:0,b:0,a:255}, {r:255,g:255,b:255,a:255} ],
-      scale: 1,
-      roundcoords: 1,
+      scale: 1000/size,        // scale the traced *vector*, not the source pixels
+      roundcoords: 2,
       viewbox: true,
       desc: false
     };
     const svgstring = ImageTracer.imagedataToSVG(imgData, options);
-    return extractInkPath(svgstring, canvas.width, canvas.height, color);
+    return extractInkPath(svgstring, 1000, 1000, color);
   }
 
   // Picks out only the "ink" (dark) path(s) from ImageTracer's output and discards
@@ -640,14 +642,13 @@
     const pad = parseInt(padRange.value,10);
     const smooth = parseInt(smoothRange.value,10);
     const color = '#000000';
-    const SIZE = 1000;
 
     generatedChars = [];
     let failCount = 0;
     active.forEach((box, i)=>{
       try{
-        const canvas = cropToSquareCanvas(box, pad, SIZE);
-        const svg = traceCanvasToSVG(canvas, smooth, color);
+        const crop = buildCharacterCrop(box, pad);
+        const svg = traceCanvasToSVG(crop.canvas, crop.size, smooth, color);
         generatedChars.push({ index: generatedChars.length+1, svg });
       }catch(err){
         failCount++;
