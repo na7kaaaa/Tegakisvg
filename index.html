@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>tegaki.svg（仮）| 手書き文字を、1文字ずつSVGに。</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/imagetracerjs/1.2.6/imagetracer_v1.2.6.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
@@ -155,7 +155,7 @@
       </div>
       <div class="control">
         <label>Merge 感度 <span id="mergeVal"></span></label>
-        <input type="range" id="mergeRange" min="0" max="100" value="30">
+        <input type="range" id="mergeRange" min="0" max="150" value="45">
       </div>
       <div class="control">
         <label>Smooth（パス滑らかさ） <span id="smoothVal"></span></label>
@@ -202,6 +202,16 @@
   let workW = 0, workH = 0;
   let boxes = [];                 // final grouped boxes: {x,y,w,h,excluded}
   let generatedChars = [];        // {svg, index}
+
+  window.addEventListener('load', ()=>{
+    const missing = [];
+    if(typeof ImageTracer === 'undefined') missing.push('SVG変換(ImageTracer)');
+    if(typeof JSZip === 'undefined') missing.push('ZIP生成(JSZip)');
+    if(missing.length){
+      showMsg(document.getElementById('uploadMsg'),
+        missing.join('・') + ' の読み込みに失敗しました。通信環境を確認し、ページを再読み込みしてください。', 'error');
+    }
+  });
 
   const fileInput = document.getElementById('fileInput');
   const dropzone = document.getElementById('dropzone');
@@ -351,8 +361,8 @@
     return comps;
   }
 
-  // ---------- union-find merge based on proximity ----------
-  function mergeBoxes(comps, mergeDist){
+  // ---------- union-find merge based on proximity (single pass) ----------
+  function mergeOnce(comps, threshold){
     const n = comps.length;
     const parent = Array.from({length:n}, (_,i)=>i);
     function find(a){ while(parent[a]!==a){ parent[a]=parent[parent[a]]; a=parent[a]; } return a; }
@@ -364,11 +374,6 @@
       const dy = Math.max(a.y-by2, b.y-ay2, 0);
       return Math.hypot(dx,dy);
     }
-
-    // reference size = median char box dimension, so mergeDist scales with handwriting size
-    const sizes = comps.map(c=>Math.max(c.w,c.h)).sort((a,b)=>a-b);
-    const medSize = sizes.length ? sizes[Math.floor(sizes.length/2)] : 20;
-    const threshold = (mergeDist/100) * medSize * 0.9;
 
     for(let i=0;i<n;i++){
       for(let j=i+1;j<n;j++){
@@ -388,6 +393,31 @@
       const y2 = Math.max(...members.map(m=>m.y+m.h));
       return {x,y,w:x2-x,h:y2-y,area:members.reduce((s,m)=>s+m.area,0)};
     });
+  }
+
+  function percentile(arr, p){
+    const s = arr.slice().sort((a,b)=>a-b);
+    if(!s.length) return 20;
+    const idx = Math.min(s.length-1, Math.floor(s.length*p));
+    return s[idx];
+  }
+
+  // iterative merge: strokes of the same character (dakuten, separated radicals, etc.)
+  // are progressively combined. Reference size uses the 75th percentile rather than
+  // the median, since a handful of tiny dot/stroke fragments otherwise drags the
+  // median down and makes the merge distance too small to bridge real gaps.
+  function mergeBoxes(comps, mergeDist){
+    let groups = comps.map(c=>({...c}));
+    const MAX_ITER = 4;
+    for(let iter=0; iter<MAX_ITER; iter++){
+      const sizes = groups.map(g=>Math.max(g.w,g.h));
+      const refSize = percentile(sizes, 0.75);
+      const threshold = (mergeDist/100) * refSize * 0.9;
+      const merged = mergeOnce(groups, threshold);
+      if(merged.length === groups.length){ groups = merged; break; }
+      groups = merged;
+    }
+    return groups;
   }
 
   // ---------- reading order (rows: top->bottom, within row: left->right) ----------
@@ -565,7 +595,14 @@
   }
 
   document.getElementById('generateBtn').addEventListener('click', ()=>{
-    const active = boxes.filter(b=>!b.excluded);
+    clearMsg(detectMsg);
+
+    if(typeof ImageTracer === 'undefined'){
+      showMsg(detectMsg, 'SVG変換ライブラリの読み込みに失敗しました。通信環境を確認して、ページを再読み込みしてください。', 'error');
+      return;
+    }
+
+    const active = boxes.filter(b=>!b.excluded && b.w>0 && b.h>0);
     if(active.length===0){
       showMsg(detectMsg, '文字を検出できませんでした。ThresholdまたはMergeを調整してください。', 'error');
       return;
@@ -575,11 +612,26 @@
     const color = '#000000';
     const SIZE = 1000;
 
-    generatedChars = active.map((box, i)=>{
-      const canvas = cropToSquareCanvas(box, pad, SIZE);
-      const svg = traceCanvasToSVG(canvas, smooth, color);
-      return { index: i+1, svg };
+    generatedChars = [];
+    let failCount = 0;
+    active.forEach((box, i)=>{
+      try{
+        const canvas = cropToSquareCanvas(box, pad, SIZE);
+        const svg = traceCanvasToSVG(canvas, smooth, color);
+        generatedChars.push({ index: generatedChars.length+1, svg });
+      }catch(err){
+        failCount++;
+        console.error('SVG生成に失敗:', box, err);
+      }
     });
+
+    if(generatedChars.length===0){
+      showMsg(detectMsg, 'SVGの生成に失敗しました。画像や設定を変えて再度お試しください。', 'error');
+      return;
+    }
+    if(failCount>0){
+      showMsg(detectMsg, failCount+'件の文字でSVG生成に失敗したためスキップしました。', 'info');
+    }
 
     renderResultGrid();
     resultSection.style.display = 'block';
@@ -614,6 +666,10 @@
 
   document.getElementById('zipBtn').addEventListener('click', async ()=>{
     if(generatedChars.length===0) return;
+    if(typeof JSZip === 'undefined'){
+      showMsg(detectMsg, 'ZIP生成ライブラリの読み込みに失敗しました。個別ダウンロードをお試しください。', 'error');
+      return;
+    }
     const zip = new JSZip();
     const folder = zip.folder('tegaki-svg');
     generatedChars.forEach(item=>{
