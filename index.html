@@ -2,720 +2,349 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>tegaki.svg（仮）| 手書き文字を、1文字ずつSVGに。</title>
-<script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.min.js"></script>
+<title>tegaki.svg 原稿切り出し</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
-    --ink:#111417;
-    --paper:#ffffff;
-    --line:#e3e6ea;
-    --accent:#39435a;   /* ブルーグレー */
-    --accent-soft:#eef0f4;
-    --muted:#8a919c;
-    --danger:#b23b3b;
+    --ink:#14171c;
+    --panel:#1b2028;
+    --panel2:#232a35;
+    --accent:#4f6d8f;
+    --accent-soft:#7d95ac;
+    --line:#333c48;
+    --ok:#6fae7c;
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
-    font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
-    background:var(--paper);
-    color:var(--ink);
-    line-height:1.7;
+    background:var(--ink);
+    color:#e7e9ec;
+    font-family:"Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+    display:flex;
   }
-  .wrap{max-width:1040px;margin:0 auto;padding:40px 24px 120px;}
-  header{
-    display:flex;justify-content:space-between;align-items:baseline;
-    border-bottom:1px solid var(--line);
-    padding-bottom:20px;margin-bottom:36px;
+  #controls{
+    width:340px;
+    min-width:340px;
+    height:100vh;
+    overflow-y:auto;
+    background:var(--panel);
+    padding:20px 18px 40px;
+    border-right:1px solid var(--line);
   }
-  header h1{
-    font-size:22px;letter-spacing:0.02em;margin:0;font-weight:600;
+  h1{ font-size:15px; margin:0 0 2px; color:#fff; }
+  .sub{ font-size:11px; color:var(--accent-soft); margin-bottom:18px; }
+  fieldset{
+    border:1px solid var(--line);
+    border-radius:6px;
+    margin:0 0 14px;
+    padding:10px 12px 12px;
   }
-  header p{margin:4px 0 0;color:var(--muted);font-size:13px;}
-  .privacy{
-    font-size:12px;color:var(--muted);background:var(--accent-soft);
-    padding:8px 14px;border-radius:6px;display:inline-block;margin-bottom:32px;
+  legend{ font-size:11px; color:var(--accent-soft); padding:0 4px; }
+  .step{ font-size:11px; color:#8b94a1; margin-bottom:6px; line-height:1.5; }
+  input[type=file]{ width:100%; font-size:12px; color:#ccc; margin-bottom:8px; }
+  .num-row{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:12px; margin:6px 0;
   }
-  section{margin-bottom:48px;}
-  .step-label{
-    font-size:12px;color:var(--muted);margin-bottom:6px;
+  .num-row input[type=number]{
+    width:80px; background:var(--panel2); border:1px solid var(--line);
+    color:#fff; border-radius:4px; padding:4px 6px; font-size:12px;
   }
-  h2{font-size:16px;margin:0 0 16px;font-weight:600;}
-
-  #dropzone{
-    border:1.5px dashed var(--line);
-    border-radius:10px;
-    padding:48px 20px;
-    text-align:center;
-    color:var(--muted);
-    cursor:pointer;
-    transition:border-color .15s, background .15s;
-  }
-  #dropzone.drag{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);}
-  #dropzone input{display:none;}
-
-  .preview-row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;}
-  .preview-box{
-    border:1px solid var(--line);border-radius:8px;padding:12px;
-    background:#fafbfc;
-  }
-  .preview-box canvas{max-width:100%;display:block;border-radius:4px;}
-  .preview-box .cap{font-size:12px;color:var(--muted);margin-top:8px;}
-
-  .controls{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-    gap:20px;margin-top:20px;padding:20px;border:1px solid var(--line);border-radius:8px;
-  }
-  .control label{
-    display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;color:var(--ink);
-  }
-  .control span{color:var(--muted);font-variant-numeric:tabular-nums;}
-  input[type=range]{width:100%;accent-color:var(--accent);}
-
-  .actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;}
   button{
-    font-family:inherit;font-size:13px;border-radius:6px;border:1px solid var(--line);
-    background:var(--paper);color:var(--ink);padding:9px 16px;cursor:pointer;
-    transition:background .15s,border-color .15s;
+    width:100%; padding:10px; border:none; border-radius:6px;
+    font-size:13px; font-weight:600; cursor:pointer; margin-top:6px;
   }
-  button:hover{border-color:var(--accent);}
-  button.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
-  button.primary:hover{background:#2c3446;}
-  button:disabled{opacity:.4;cursor:not-allowed;}
-
-  #grid{
-    display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
-    gap:14px;margin-top:20px;
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+  #resetPts{ background:var(--panel2); color:#e7e9ec; border:1px solid var(--line); }
+  #slice{ background:var(--accent); color:#fff; }
+  #slice:hover:not(:disabled){ background:#5c7ea3; }
+  #zipBtn{ background:var(--ok); color:#0e1712; }
+  #log{
+    font-size:11px; color:#8b94a1; margin-top:10px; line-height:1.6;
+    white-space:pre-wrap;
   }
-  .card{
-    border:1px solid var(--line);border-radius:8px;padding:10px;background:#fafbfc;
-    display:flex;flex-direction:column;gap:8px;
+  #viewer{ flex:1; height:100vh; overflow:auto; background:#3a4048; padding:24px; }
+  #srcWrap{ position:relative; display:inline-block; max-width:100%; }
+  #srcCanvas{ max-width:100%; display:block; cursor:crosshair; background:#000; }
+  #result{ margin-top:20px; }
+  .cellThumb{
+    display:inline-flex; flex-direction:column; align-items:center;
+    width:64px; margin:2px; font-size:9px; color:#ccc;
   }
-  .card .thumb{
-    background:#fff;border:1px solid var(--line);border-radius:6px;
-    aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;
-  }
-  .card .thumb svg{width:80%;height:80%;}
-  .card .meta{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;}
-  .card button{font-size:11px;padding:6px 8px;}
-  .card .remove{color:var(--danger);border-color:var(--danger);}
-
-  .msg{font-size:13px;padding:10px 14px;border-radius:6px;margin-top:12px;}
-  .msg.error{background:#fdecec;color:var(--danger);}
-  .msg.info{background:var(--accent-soft);color:var(--accent);}
-  footer{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;}
+  .cellThumb canvas{ background:#fff; border:1px solid #555; }
+  .cellThumb.blank canvas{ opacity:.3; }
+  .hint{ color:#dcd9c8; font-size:11px; margin-bottom:8px; }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <header>
-    <div>
-      <h1>tegaki.svg <span style="color:var(--muted);font-weight:400;">（仮）</span></h1>
-      <p>手書き文字を、1文字ずつSVGに。</p>
-    </div>
-  </header>
+<div id="controls">
+  <h1>tegaki.svg 原稿切り出し</h1>
+  <div class="sub">撮影した原稿1ページから、4隅指定→補正→マス分割→文字ラベル付きで書き出し</div>
 
-  <div class="privacy">画像はサーバーへ送信されません。すべてブラウザ内で処理されます。</div>
+  <fieldset>
+    <legend>1. 文字リスト</legend>
+    <div class="step">tegaki-char-order.json を読み込んでください</div>
+    <input type="file" id="jsonFile" accept="application/json">
+    <div class="step" id="jsonStatus">未読み込み</div>
+  </fieldset>
 
-  <section>
-    <div class="step-label">STEP 1</div>
-    <h2>画像をアップロード</h2>
-    <div id="dropzone">
-      画像をここにドロップ、またはクリックして選択（PNG / JPG / JPEG）
-      <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp">
-    </div>
-    <div id="uploadMsg"></div>
-  </section>
+  <fieldset>
+    <legend>2. 原稿写真</legend>
+    <input type="file" id="imgFile" accept="image/*">
+    <div class="step" id="imgStatus">未読み込み</div>
+  </fieldset>
 
-  <section id="detectSection" style="display:none;">
-    <div class="step-label">STEP 2</div>
-    <h2>文字検出を調整</h2>
-    <div class="preview-row">
-      <div class="preview-box">
-        <canvas id="srcCanvas"></canvas>
-        <div class="cap">元画像</div>
-      </div>
-      <div class="preview-box">
-        <canvas id="detectCanvas"></canvas>
-        <div class="cap">検出結果（枠線＋番号）</div>
-      </div>
-    </div>
+  <fieldset>
+    <legend>3. グリッド設定</legend>
+    <div class="num-row"><span>列数（横）</span><input type="number" id="cols" value="10" min="1"></div>
+    <div class="num-row"><span>行数（縦）</span><input type="number" id="rows" value="12" min="1"></div>
+    <div class="num-row"><span>開始文字番号</span><input type="number" id="startIdx" value="1" min="1"></div>
+    <div class="step">原稿ページ左上の「No.○-○」の左側の数字を入れてください</div>
+  </fieldset>
 
-    <div class="controls">
-      <div class="control">
-        <label>Threshold <span id="thVal"></span></label>
-        <input type="range" id="thRange" min="-60" max="60" value="0">
-      </div>
-      <div class="control">
-        <label>Noise 除去 <span id="noiseVal"></span></label>
-        <input type="range" id="noiseRange" min="0" max="200" value="20">
-      </div>
-      <div class="control">
-        <label>Merge 感度 <span id="mergeVal"></span></label>
-        <input type="range" id="mergeRange" min="0" max="150" value="45">
-      </div>
-      <div class="control">
-        <label>Smooth（パス滑らかさ） <span id="smoothVal"></span></label>
-        <input type="range" id="smoothRange" min="0" max="100" value="40">
-      </div>
-      <div class="control">
-        <label>余白 Padding <span id="padVal"></span></label>
-        <input type="range" id="padRange" min="0" max="30" value="10">
-      </div>
-    </div>
+  <fieldset>
+    <legend>4. 補正用の4点</legend>
+    <div class="step">右の画像で、マスが並んでいる範囲の <b>外枠の4隅</b> を<br>左上→右上→右下→左下 の順にクリック</div>
+    <div class="step" id="ptStatus">0 / 4 点</div>
+    <button id="resetPts">4点をやり直す</button>
+  </fieldset>
 
-    <div class="actions">
-      <button id="redetectBtn">再検出</button>
-      <button id="clearSelBtn">選択削除（クリックした枠を除外）</button>
-      <button class="primary" id="generateBtn">SVGを生成する →</button>
-    </div>
-    <div id="detectMsg"></div>
-  </section>
+  <button id="slice" disabled>この設定で切り出す</button>
+  <button id="zipBtn" disabled>ZIPでダウンロード</button>
 
-  <section id="resultSection" style="display:none;">
-    <div class="step-label">STEP 3 / 4</div>
-    <h2>SVGを確認 &amp; ダウンロード</h2>
-    <div class="actions">
-      <button class="primary" id="zipBtn">すべてZIPで保存</button>
-      <span id="countLabel" style="align-self:center;font-size:12px;color:var(--muted);"></span>
-    </div>
-    <div id="grid"></div>
-  </section>
+  <div id="log">準備中…</div>
+</div>
 
-  <footer>tegaki.svg — MVP / ブラウザ内完結・AI API不使用</footer>
+<div id="viewer">
+  <div class="hint">画像をクリックして4隅を指定してください（左上→右上→右下→左下）</div>
+  <div id="srcWrap">
+    <canvas id="srcCanvas"></canvas>
+  </div>
+  <div id="result"></div>
 </div>
 
 <script>
-(function(){
-  "use strict";
+// ---- 4点透視変換（general 2D projection） ----
+function adj(m){return[m[4]*m[8]-m[5]*m[7],m[2]*m[7]-m[1]*m[8],m[1]*m[5]-m[2]*m[4],m[5]*m[6]-m[3]*m[8],m[0]*m[8]-m[2]*m[6],m[2]*m[3]-m[0]*m[5],m[3]*m[7]-m[4]*m[6],m[1]*m[6]-m[0]*m[7],m[0]*m[4]-m[1]*m[3]];}
+function multmm(a,b){var c=Array(9);for(var i=0;i!=3;++i)for(var j=0;j!=3;++j){var s=0;for(var k=0;k!=3;++k)s+=a[3*i+k]*b[3*k+j];c[3*i+j]=s;}return c;}
+function multmv(m,v){return[m[0]*v[0]+m[1]*v[1]+m[2]*v[2],m[3]*v[0]+m[4]*v[1]+m[5]*v[2],m[6]*v[0]+m[7]*v[1]+m[8]*v[2]];}
+function basisToPoints(x1,y1,x2,y2,x3,y3,x4,y4){var m=[x1,x2,x3,y1,y2,y3,1,1,1];var v=multmv(adj(m),[x4,y4,1]);return multmm(m,[v[0],0,0,0,v[1],0,0,0,v[2]]);}
+function general2DProjection(x1s,y1s,x1d,y1d,x2s,y2s,x2d,y2d,x3s,y3s,x3d,y3d,x4s,y4s,x4d,y4d){var s=basisToPoints(x1s,y1s,x2s,y2s,x3s,y3s,x4s,y4s);var d=basisToPoints(x1d,y1d,x2d,y2d,x3d,y3d,x4d,y4d);return multmm(d,adj(s));}
+function project(m,x,y){var v=multmv(m,[x,y,1]);return[v[0]/v[2],v[1]/v[2]];}
 
-  // ---------- state ----------
-  let srcCanvas = document.getElementById('srcCanvas');
-  let detectCanvas = document.getElementById('detectCanvas');
-  let originalImage = null;       // HTMLImageElement
-  let workCanvas = null;          // downscaled working canvas (for detection)
-  let workCtx = null;
-  let grayData = null;            // Uint8ClampedArray grayscale, length w*h
-  let workW = 0, workH = 0;
-  let boxes = [];                 // final grouped boxes: {x,y,w,h,excluded}
-  let generatedChars = [];        // {svg, index}
+// ---- state ----
+let characters = null;
+let srcImage = null;
+let srcCanvas = document.getElementById("srcCanvas");
+let srcCtx = srcCanvas.getContext("2d");
+let points = []; // クリックされた4点（画像の実ピクセル座標）
+let scaleShown = 1; // 画面表示上のスケール（クリック座標の補正用）
+let cellResults = []; // {index, char, canvas}
 
-  window.addEventListener('load', ()=>{
-    const missing = [];
-    if(typeof ImageTracer === 'undefined') missing.push('SVG変換(ImageTracer)');
-    if(typeof JSZip === 'undefined') missing.push('ZIP生成(JSZip)');
-    if(missing.length){
-      showMsg(document.getElementById('uploadMsg'),
-        missing.join('・') + ' の読み込みに失敗しました。通信環境を確認し、ページを再読み込みしてください。', 'error');
+const CELL_PX = 200; // 1マスあたりの出力解像度
+
+function log(msg){ document.getElementById("log").textContent = msg; }
+
+// ---- 1. JSON読み込み ----
+document.getElementById("jsonFile").addEventListener("change", (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      characters = data.characters;
+      document.getElementById("jsonStatus").textContent = `読み込み済み（${characters.length}文字）`;
+      checkReady();
+    }catch(err){
+      document.getElementById("jsonStatus").textContent = "JSONの読み込みに失敗しました";
     }
+  };
+  reader.readAsText(f);
+});
+
+// ---- 2. 画像読み込み ----
+document.getElementById("imgFile").addEventListener("change", (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = ()=>{
+    srcImage = img;
+    points = [];
+    updatePtStatus();
+    const maxW = 1400;
+    scaleShown = img.width > maxW ? maxW / img.width : 1;
+    srcCanvas.width = img.width * scaleShown;
+    srcCanvas.height = img.height * scaleShown;
+    redrawSrc();
+    document.getElementById("imgStatus").textContent = `読み込み済み（${img.width}×${img.height}px）`;
+    checkReady();
+  };
+  img.src = url;
+});
+
+function redrawSrc(){
+  srcCtx.clearRect(0,0,srcCanvas.width,srcCanvas.height);
+  srcCtx.drawImage(srcImage, 0,0, srcCanvas.width, srcCanvas.height);
+  const labels = ["①左上","②右上","③右下","④左下"];
+  points.forEach((p,i)=>{
+    const x = p.x*scaleShown, y = p.y*scaleShown;
+    srcCtx.fillStyle = "#ff5555";
+    srcCtx.beginPath();
+    srcCtx.arc(x,y,6,0,Math.PI*2);
+    srcCtx.fill();
+    srcCtx.fillStyle = "#fff";
+    srcCtx.font = "14px sans-serif";
+    srcCtx.fillText(labels[i], x+8, y-8);
   });
+}
 
-  const fileInput = document.getElementById('fileInput');
-  const dropzone = document.getElementById('dropzone');
-  const uploadMsg = document.getElementById('uploadMsg');
-  const detectSection = document.getElementById('detectSection');
-  const resultSection = document.getElementById('resultSection');
-  const detectMsg = document.getElementById('detectMsg');
+srcCanvas.addEventListener("click", (e)=>{
+  if(!srcImage || points.length>=4) return;
+  const rect = srcCanvas.getBoundingClientRect();
+  const dispX = (e.clientX-rect.left) * (srcCanvas.width/rect.width);
+  const dispY = (e.clientY-rect.top) * (srcCanvas.height/rect.height);
+  points.push({ x: dispX/scaleShown, y: dispY/scaleShown }); // 画像の実ピクセル座標で保持
+  redrawSrc();
+  updatePtStatus();
+  checkReady();
+});
 
-  const thRange = document.getElementById('thRange');
-  const noiseRange = document.getElementById('noiseRange');
-  const mergeRange = document.getElementById('mergeRange');
-  const smoothRange = document.getElementById('smoothRange');
-  const padRange = document.getElementById('padRange');
-  const thVal = document.getElementById('thVal');
-  const noiseVal = document.getElementById('noiseVal');
-  const mergeVal = document.getElementById('mergeVal');
-  const smoothVal = document.getElementById('smoothVal');
-  const padVal = document.getElementById('padVal');
+document.getElementById("resetPts").addEventListener("click", ()=>{
+  points = [];
+  redrawSrc();
+  updatePtStatus();
+  checkReady();
+});
 
-  function syncLabels(){
-    thVal.textContent = thRange.value;
-    noiseVal.textContent = noiseRange.value;
-    mergeVal.textContent = mergeRange.value;
-    smoothVal.textContent = smoothRange.value;
-    padVal.textContent = padRange.value + '%';
-  }
-  [thRange, noiseRange, mergeRange, smoothRange, padRange].forEach(el=>{
-    el.addEventListener('input', syncLabels);
-  });
-  syncLabels();
+function updatePtStatus(){
+  document.getElementById("ptStatus").textContent = `${points.length} / 4 点`;
+}
 
-  function showMsg(container, text, type){
-    container.innerHTML = '<div class="msg '+(type||'info')+'">'+text+'</div>';
-  }
-  function clearMsg(container){ container.innerHTML=''; }
+function checkReady(){
+  const ready = characters && srcImage && points.length===4;
+  document.getElementById("slice").disabled = !ready;
+}
 
-  // ---------- upload ----------
-  dropzone.addEventListener('click', ()=>fileInput.click());
-  dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
-  dropzone.addEventListener('dragleave', ()=>dropzone.classList.remove('drag'));
-  dropzone.addEventListener('drop', e=>{
-    e.preventDefault(); dropzone.classList.remove('drag');
-    if(e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-  });
-  fileInput.addEventListener('change', e=>{
-    if(e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
-  });
+// ---- 4. 切り出し実行 ----
+document.getElementById("slice").addEventListener("click", ()=>{
+  const cols = parseInt(document.getElementById("cols").value) || 10;
+  const rows = parseInt(document.getElementById("rows").value) || 12;
+  const startIdx = parseInt(document.getElementById("startIdx").value) || 1;
 
-  function handleFile(file){
-    clearMsg(uploadMsg);
-    if(!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)){
-      showMsg(uploadMsg, '対応していないファイル形式です。PNG / JPG / JPEG / WebPを使ってください。', 'error');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = ev=>{
-      const img = new Image();
-      img.onload = ()=>{
-        originalImage = img;
-        prepareWorkCanvas(img);
-        detectSection.style.display = 'block';
-        resultSection.style.display = 'none';
-        runDetection();
-      };
-      img.onerror = ()=> showMsg(uploadMsg, '画像が読み込めませんでした。別のファイルをお試しください。', 'error');
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
+  const W = cols * CELL_PX;
+  const H = rows * CELL_PX;
 
-  function prepareWorkCanvas(img){
-    const MAX = 2048;
-    let w = img.naturalWidth, h = img.naturalHeight;
-    const scale = Math.min(1, MAX / Math.max(w,h));
-    w = Math.round(w*scale); h = Math.round(h*scale);
-    workCanvas = document.createElement('canvas');
-    workCanvas.width = w; workCanvas.height = h;
-    workCtx = workCanvas.getContext('2d', {willReadFrequently:true});
-    workCtx.drawImage(img, 0, 0, w, h);
-    workW = w; workH = h;
+  // 補正後キャンバス(0,0)-(W,H) の4隅 -> 元画像でクリックした4点、への変換行列
+  const M = general2DProjection(
+    0,0,           points[0].x, points[0].y,
+    W,0,           points[1].x, points[1].y,
+    W,H,           points[2].x, points[2].y,
+    0,H,           points[3].x, points[3].y
+  );
 
-    // draw source preview (scaled to fit display width)
-    const dispScale = Math.min(1, 480/w);
-    srcCanvas.width = w*dispScale; srcCanvas.height = h*dispScale;
-    srcCanvas.getContext('2d').drawImage(img, 0, 0, srcCanvas.width, srcCanvas.height);
+  // 元画像を丸ごとcanvasに載せてピクセルを読めるようにする
+  const full = document.createElement("canvas");
+  full.width = srcImage.width;
+  full.height = srcImage.height;
+  const fullCtx = full.getContext("2d");
+  fullCtx.drawImage(srcImage, 0, 0);
+  const srcData = fullCtx.getImageData(0,0,full.width,full.height);
 
-    // grayscale
-    const imgData = workCtx.getImageData(0,0,w,h).data;
-    grayData = new Uint8ClampedArray(w*h);
-    for(let i=0, p=0; i<imgData.length; i+=4, p++){
-      grayData[p] = (imgData[i]*0.299 + imgData[i+1]*0.587 + imgData[i+2]*0.114) | 0;
-    }
-  }
+  const rectified = document.createElement("canvas");
+  rectified.width = W;
+  rectified.height = H;
+  const rCtx = rectified.getContext("2d");
+  const outData = rCtx.createImageData(W,H);
 
-  // ---------- Otsu threshold ----------
-  function otsuThreshold(gray){
-    const hist = new Array(256).fill(0);
-    for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-    const total = gray.length;
-    let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-    let sumB=0, wB=0, wF=0, maxVar=0, threshold=128;
-    for(let t=0;t<256;t++){
-      wB += hist[t]; if(wB===0) continue;
-      wF = total - wB; if(wF===0) break;
-      sumB += t*hist[t];
-      const mB = sumB/wB, mF=(sum-sumB)/wF;
-      const varBetween = wB*wF*(mB-mF)*(mB-mF);
-      if(varBetween > maxVar){ maxVar = varBetween; threshold = t; }
-    }
-    return threshold;
-  }
-
-  // ---------- connected components (BFS, 8-connectivity) ----------
-  function findComponents(binary, w, h){
-    const visited = new Uint8Array(w*h);
-    const comps = [];
-    const stack = new Int32Array(w*h);
-    for(let y=0;y<h;y++){
-      for(let x=0;x<w;x++){
-        const idx = y*w+x;
-        if(binary[idx] && !visited[idx]){
-          let sp=0;
-          stack[sp++]=idx; visited[idx]=1;
-          let minX=x,maxX=x,minY=y,maxY=y,count=0;
-          while(sp>0){
-            const cur = stack[--sp];
-            const cx = cur % w, cy = (cur/w)|0;
-            count++;
-            if(cx<minX)minX=cx; if(cx>maxX)maxX=cx;
-            if(cy<minY)minY=cy; if(cy>maxY)maxY=cy;
-            for(let dy=-1;dy<=1;dy++){
-              for(let dx=-1;dx<=1;dx++){
-                if(dx===0&&dy===0) continue;
-                const nx=cx+dx, ny=cy+dy;
-                if(nx<0||ny<0||nx>=w||ny>=h) continue;
-                const nidx = ny*w+nx;
-                if(binary[nidx] && !visited[nidx]){
-                  visited[nidx]=1; stack[sp++]=nidx;
-                }
-              }
-            }
-          }
-          comps.push({x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1,area:count});
-        }
+  for(let y=0; y<H; y++){
+    for(let x=0; x<W; x++){
+      const [sx, sy] = project(M, x+0.5, y+0.5);
+      const ix = Math.round(sx), iy = Math.round(sy);
+      const outOff = (y*W+x)*4;
+      if(ix>=0 && iy>=0 && ix<full.width && iy<full.height){
+        const inOff = (iy*full.width+ix)*4;
+        outData.data[outOff]   = srcData.data[inOff];
+        outData.data[outOff+1] = srcData.data[inOff+1];
+        outData.data[outOff+2] = srcData.data[inOff+2];
+        outData.data[outOff+3] = 255;
+      }else{
+        outData.data[outOff]=255; outData.data[outOff+1]=255;
+        outData.data[outOff+2]=255; outData.data[outOff+3]=255;
       }
     }
-    return comps;
   }
+  rCtx.putImageData(outData, 0, 0);
 
-  // ---------- union-find merge based on proximity (single pass) ----------
-  function mergeOnce(comps, threshold){
-    const n = comps.length;
-    const parent = Array.from({length:n}, (_,i)=>i);
-    function find(a){ while(parent[a]!==a){ parent[a]=parent[parent[a]]; a=parent[a]; } return a; }
-    function union(a,b){ a=find(a); b=find(b); if(a!==b) parent[a]=b; }
+  // マス分割
+  cellResults = [];
+  const resultEl = document.getElementById("result");
+  resultEl.innerHTML = "";
+  const grid = document.createElement("div");
 
-    function gap(a,b){
-      const ax2=a.x+a.w, ay2=a.y+a.h, bx2=b.x+b.w, by2=b.y+b.h;
-      const dx = Math.max(a.x-bx2, b.x-ax2, 0);
-      const dy = Math.max(a.y-by2, b.y-ay2, 0);
-      return Math.hypot(dx,dy);
-    }
+  for(let r=0; r<rows; r++){
+    for(let c=0; c<cols; c++){
+      const idx = r*cols + c;
+      const listIdx = startIdx - 1 + idx;
+      const ch = (characters && listIdx < characters.length) ? characters[listIdx] : null;
 
-    for(let i=0;i<n;i++){
-      for(let j=i+1;j<n;j++){
-        if(gap(comps[i], comps[j]) <= threshold) union(i,j);
-      }
+      const cellCanvas = document.createElement("canvas");
+      cellCanvas.width = CELL_PX;
+      cellCanvas.height = CELL_PX;
+      cellCanvas.getContext("2d").drawImage(
+        rectified, c*CELL_PX, r*CELL_PX, CELL_PX, CELL_PX, 0,0, CELL_PX, CELL_PX
+      );
+
+      cellResults.push({ index: listIdx+1, char: ch, canvas: cellCanvas });
+
+      const thumb = document.createElement("div");
+      thumb.className = "cellThumb" + (ch ? "" : " blank");
+      const small = document.createElement("canvas");
+      small.width = 56; small.height = 56;
+      small.getContext("2d").drawImage(cellCanvas, 0,0,56,56);
+      thumb.appendChild(small);
+      const label = document.createElement("span");
+      label.textContent = ch ? `${listIdx+1}:${ch}` : "-";
+      thumb.appendChild(label);
+      grid.appendChild(thumb);
     }
-    const groups = {};
-    for(let i=0;i<n;i++){
-      const r = find(i);
-      if(!groups[r]) groups[r] = [];
-      groups[r].push(comps[i]);
-    }
-    return Object.values(groups).map(members=>{
-      const x = Math.min(...members.map(m=>m.x));
-      const y = Math.min(...members.map(m=>m.y));
-      const x2 = Math.max(...members.map(m=>m.x+m.w));
-      const y2 = Math.max(...members.map(m=>m.y+m.h));
-      return {x,y,w:x2-x,h:y2-y,area:members.reduce((s,m)=>s+m.area,0)};
-    });
   }
+  resultEl.appendChild(grid);
 
-  function percentile(arr, p){
-    const s = arr.slice().sort((a,b)=>a-b);
-    if(!s.length) return 20;
-    const idx = Math.min(s.length-1, Math.floor(s.length*p));
-    return s[idx];
+  log(`切り出し完了: ${cellResults.length}マス（${startIdx}〜${startIdx+cellResults.length-1}文字目）`);
+  document.getElementById("zipBtn").disabled = false;
+});
+
+// ---- ZIP書き出し ----
+document.getElementById("zipBtn").addEventListener("click", async ()=>{
+  log("ZIPを作成しています…");
+  const zip = new JSZip();
+  const manifest = [];
+
+  for(const cell of cellResults){
+    if(!cell.char) continue; // 文字リスト範囲外の空マスはスキップ
+    const codepoint = cell.char.codePointAt(0).toString(16).toUpperCase().padStart(4,"0");
+    const filename = `${String(cell.index).padStart(4,"0")}_U+${codepoint}.png`;
+    const dataUrl = cell.canvas.toDataURL("image/png");
+    const base64 = dataUrl.split(",")[1];
+    zip.file(filename, base64, {base64:true});
+    manifest.push({ index: cell.index, char: cell.char, codepoint: "U+"+codepoint, filename });
   }
+  zip.file("manifest.json", JSON.stringify(manifest, null, 2));
 
-  // iterative merge: strokes of the same character (dakuten, separated radicals, etc.)
-  // are progressively combined. Reference size uses the 75th percentile rather than
-  // the median, since a handful of tiny dot/stroke fragments otherwise drags the
-  // median down and makes the merge distance too small to bridge real gaps.
-  function mergeBoxes(comps, mergeDist){
-    let groups = comps.map(c=>({...c}));
-    const MAX_ITER = 4;
-    for(let iter=0; iter<MAX_ITER; iter++){
-      const sizes = groups.map(g=>Math.max(g.w,g.h));
-      const refSize = percentile(sizes, 0.75);
-      const threshold = (mergeDist/100) * refSize * 0.9;
-      const merged = mergeOnce(groups, threshold);
-      if(merged.length === groups.length){ groups = merged; break; }
-      groups = merged;
-    }
-    return groups;
-  }
+  const blob = await zip.generateAsync({type:"blob"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "tegaki-cells.zip";
+  a.click();
+  URL.revokeObjectURL(url);
+  log(`ZIPを書き出しました（${manifest.length}マス分）`);
+});
 
-  // ---------- reading order (rows: top->bottom, within row: left->right) ----------
-  function orderBoxes(bx){
-    const sorted = bx.slice().sort((a,b)=>a.y-b.y);
-    const rows = [];
-    sorted.forEach(box=>{
-      const cy = box.y + box.h/2;
-      let row = rows.find(r => cy >= r.top && cy <= r.bottom);
-      if(!row){
-        row = {top: box.y, bottom: box.y+box.h, items:[]};
-        rows.push(row);
-      } else {
-        row.top = Math.min(row.top, box.y);
-        row.bottom = Math.max(row.bottom, box.y+box.h);
-      }
-      row.items.push(box);
-    });
-    rows.sort((a,b)=>a.top-b.top);
-    const result = [];
-    rows.forEach(r=>{
-      r.items.sort((a,b)=>a.x-b.x);
-      result.push(...r.items);
-    });
-    return result;
-  }
-
-  // ---------- run full detection pipeline ----------
-  function runDetection(){
-    clearMsg(detectMsg);
-    if(!grayData){ return; }
-    const otsu = otsuThreshold(grayData);
-    const th = Math.max(1, Math.min(254, otsu + parseInt(thRange.value,10)));
-
-    const binary = new Uint8Array(workW*workH);
-    for(let i=0;i<grayData.length;i++) binary[i] = grayData[i] < th ? 1 : 0;
-
-    let comps = findComponents(binary, workW, workH);
-    const noiseArea = parseInt(noiseRange.value,10);
-    comps = comps.filter(c => c.area > noiseArea);
-
-    if(comps.length === 0){
-      showMsg(detectMsg, '文字を検出できませんでした。ThresholdまたはNoiseを調整してください。', 'error');
-      boxes = [];
-      drawDetectOverlay();
-      return;
-    }
-
-    let merged = mergeBoxes(comps, parseInt(mergeRange.value,10));
-    merged = orderBoxes(merged);
-    boxes = merged.map((b,i)=>({...b, excluded:false, idx:i}));
-    drawDetectOverlay();
-  }
-
-  function drawDetectOverlay(){
-    const dispScale = Math.min(1, 480/workW);
-    detectCanvas.width = workW*dispScale;
-    detectCanvas.height = workH*dispScale;
-    const ctx = detectCanvas.getContext('2d');
-    ctx.drawImage(workCanvas, 0,0, detectCanvas.width, detectCanvas.height);
-    ctx.lineWidth = 1.5;
-    ctx.font = '11px sans-serif';
-    boxes.forEach((b, i)=>{
-      const x=b.x*dispScale, y=b.y*dispScale, w=b.w*dispScale, h=b.h*dispScale;
-      ctx.strokeStyle = b.excluded ? '#c9cdd3' : '#39435a';
-      ctx.strokeRect(x,y,w,h);
-      ctx.fillStyle = b.excluded ? '#c9cdd3' : '#39435a';
-      const label = String(i+1).padStart(2,'0');
-      ctx.fillRect(x, y-14, 20, 14);
-      ctx.fillStyle = '#fff';
-      ctx.fillText(label, x+2, y-3);
-    });
-  }
-
-  // click on detect canvas to toggle exclude
-  detectCanvas.addEventListener('click', e=>{
-    const rect = detectCanvas.getBoundingClientRect();
-    const scaleX = workW/detectCanvas.width;
-    const scaleY = workH/detectCanvas.height;
-    const mx = (e.clientX-rect.left)*scaleX;
-    const my = (e.clientY-rect.top)*scaleY;
-    for(let i=boxes.length-1;i>=0;i--){
-      const b = boxes[i];
-      if(mx>=b.x && mx<=b.x+b.w && my>=b.y && my<=b.y+b.h){
-        b.excluded = !b.excluded;
-        break;
-      }
-    }
-    drawDetectOverlay();
-  });
-
-  document.getElementById('redetectBtn').addEventListener('click', runDetection);
-  document.getElementById('clearSelBtn').addEventListener('click', ()=>{
-    showMsg(detectMsg, '除外したい枠を検出結果プレビュー上でクリックしてください（グレー＝除外）。', 'info');
-  });
-
-  // ---------- SVG generation ----------
-  // Build a small GRAYSCALE (not binarized) crop at native photo resolution, centered
-  // with padding. We deliberately do NOT threshold or pixel-upscale here: doing so
-  // bakes in a blocky pixel staircase that no downstream smoothing can undo. Instead
-  // we hand ImageTracer the real anti-aliased grayscale values and let it find the
-  // ink/background boundary itself, then scale its (sub-pixel, vector) coordinates
-  // up to the 1000-unit canvas — magnifying a curve, not a bitmap.
-  function buildCharacterCrop(box, padPercent){
-    const pad = padPercent/100;
-    const S = Math.min(800, Math.max(40, Math.ceil(Math.max(box.w, box.h) / Math.max(0.05, 1-pad*2))));
-
-    const out = document.createElement('canvas');
-    out.width = S; out.height = S;
-    const octx = out.getContext('2d');
-    octx.fillStyle = '#ffffff';
-    octx.fillRect(0,0,S,S);
-
-    const availW = S*(1-pad*2), availH = S*(1-pad*2);
-    const scale = Math.min(availW/box.w, availH/box.h);
-    const drawW = box.w*scale, drawH = box.h*scale;
-    const dx = (S-drawW)/2, dy = (S-drawH)/2;
-
-    const crop = document.createElement('canvas');
-    crop.width = box.w; crop.height = box.h;
-    const cctx = crop.getContext('2d');
-    const cImgData = cctx.createImageData(box.w, box.h);
-    for(let yy=0; yy<box.h; yy++){
-      for(let xx=0; xx<box.w; xx++){
-        const gx = box.x+xx, gy = box.y+yy;
-        const v = grayData[gy*workW+gx];
-        const p = (yy*box.w+xx)*4;
-        cImgData.data[p]=v; cImgData.data[p+1]=v; cImgData.data[p+2]=v; cImgData.data[p+3]=255;
-      }
-    }
-    cctx.putImageData(cImgData, 0, 0);
-
-    octx.imageSmoothingEnabled = true;
-    octx.drawImage(crop, 0, 0, box.w, box.h, dx, dy, drawW, drawH);
-    return { canvas: out, size: S };
-  }
-
-  function traceCanvasToSVG(canvas, size, smooth, color){
-    const ctx = canvas.getContext('2d');
-    const imgData = ctx.getImageData(0,0,canvas.width, canvas.height);
-    // smooth slider (0-100) -> ltres/qtres (lower = more detail/less smooth)
-    const ltres = 0.2 + (100-smooth)/100*1.8;   // 0.2 (smooth) .. 2.0 (detailed)
-    const qtres = 0.2 + (100-smooth)/100*1.8;
-    const options = {
-      ltres: ltres, qtres: qtres,
-      pathomit: 4,
-      numberofcolors: 2,
-      colorsampling: 0,
-      colorquantcycles: 3,     // let ImageTracer's k-means find the true ink/paper split
-      pal: [ {r:0,g:0,b:0,a:255}, {r:255,g:255,b:255,a:255} ],
-      scale: 1000/size,        // scale the traced *vector*, not the source pixels
-      roundcoords: 2,
-      viewbox: true,
-      desc: false
-    };
-    const svgstring = ImageTracer.imagedataToSVG(imgData, options);
-    return extractInkPath(svgstring, 1000, 1000, color);
-  }
-
-  // Picks out only the "ink" (dark) path(s) from ImageTracer's output and discards
-  // the background/white path(s). Rather than string-matching an expected color
-  // (which breaks if ImageTracer's k-means quantization drifts the black cluster
-  // toward gray), this parses each path's actual fill color, computes luminance,
-  // and keeps whichever fill group is darkest.
-  function parseFillColor(str){
-    if(!str) return null;
-    let m = str.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-    if(m) return [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
-    m = str.match(/#([0-9a-f]{6})/i);
-    if(m){
-      const hex = m[1];
-      return [parseInt(hex.substr(0,2),16), parseInt(hex.substr(2,2),16), parseInt(hex.substr(4,2),16)];
-    }
-    if(/black/i.test(str)) return [0,0,0];
-    if(/white/i.test(str)) return [255,255,255];
-    return null;
-  }
-
-  function extractInkPath(svgstring, w, h, color){
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(svgstring, 'image/svg+xml');
-    const paths = Array.from(doc.querySelectorAll('path'));
-    if(paths.length === 0){
-      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'"></svg>';
-    }
-
-    const byFill = new Map(); // fillKey -> {luminance, ds:[]}
-    paths.forEach(p=>{
-      const raw = (p.getAttribute('fill') || p.getAttribute('style') || '');
-      const rgb = parseFillColor(raw) || [128,128,128];
-      const luminance = 0.299*rgb[0] + 0.587*rgb[1] + 0.114*rgb[2];
-      const key = raw || 'unknown';
-      if(!byFill.has(key)) byFill.set(key, {luminance, ds:[]});
-      const d = p.getAttribute('d');
-      if(d) byFill.get(key).ds.push(d);
-    });
-
-    // ink = the darkest fill group present
-    let inkEntry = null;
-    for(const entry of byFill.values()){
-      if(!inkEntry || entry.luminance < inkEntry.luminance) inkEntry = entry;
-    }
-    const d = inkEntry ? inkEntry.ds.join(' ') : '';
-
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'">'
-      + '<path d="'+d+'" fill="'+color+'"/></svg>';
-  }
-
-  document.getElementById('generateBtn').addEventListener('click', ()=>{
-    clearMsg(detectMsg);
-
-    if(typeof ImageTracer === 'undefined'){
-      showMsg(detectMsg, 'SVG変換ライブラリの読み込みに失敗しました。通信環境を確認して、ページを再読み込みしてください。', 'error');
-      return;
-    }
-
-    const active = boxes.filter(b=>!b.excluded && b.w>0 && b.h>0);
-    if(active.length===0){
-      showMsg(detectMsg, '文字を検出できませんでした。ThresholdまたはMergeを調整してください。', 'error');
-      return;
-    }
-    const pad = parseInt(padRange.value,10);
-    const smooth = parseInt(smoothRange.value,10);
-    const color = '#000000';
-
-    generatedChars = [];
-    let failCount = 0;
-    active.forEach((box, i)=>{
-      try{
-        const crop = buildCharacterCrop(box, pad);
-        const svg = traceCanvasToSVG(crop.canvas, crop.size, smooth, color);
-        generatedChars.push({ index: generatedChars.length+1, svg });
-      }catch(err){
-        failCount++;
-        console.error('SVG生成に失敗:', box, err);
-      }
-    });
-
-    if(generatedChars.length===0){
-      showMsg(detectMsg, 'SVGの生成に失敗しました。画像や設定を変えて再度お試しください。', 'error');
-      return;
-    }
-    if(failCount>0){
-      showMsg(detectMsg, failCount+'件の文字でSVG生成に失敗したためスキップしました。', 'info');
-    }
-
-    renderResultGrid();
-    resultSection.style.display = 'block';
-    resultSection.scrollIntoView({behavior:'smooth'});
-  });
-
-  function renderResultGrid(){
-    const grid = document.getElementById('grid');
-    grid.innerHTML = '';
-    document.getElementById('countLabel').textContent = generatedChars.length + '文字を検出しました';
-    generatedChars.forEach(item=>{
-      const card = document.createElement('div');
-      card.className = 'card';
-      const fname = 'character_' + String(item.index).padStart(3,'0') + '.svg';
-      card.innerHTML =
-        '<div class="thumb">'+item.svg+'</div>'+
-        '<div class="meta"><span>#'+String(item.index).padStart(3,'0')+'</span><span>'+fname+'</span></div>'+
-        '<button class="dl">SVGを保存</button>';
-      card.querySelector('.dl').addEventListener('click', ()=>downloadSVG(item.svg, fname));
-      grid.appendChild(card);
-    });
-  }
-
-  function downloadSVG(svgString, filename){
-    const blob = new Blob([svgString], {type:'image/svg+xml'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  document.getElementById('zipBtn').addEventListener('click', async ()=>{
-    if(generatedChars.length===0) return;
-    if(typeof JSZip === 'undefined'){
-      showMsg(detectMsg, 'ZIP生成ライブラリの読み込みに失敗しました。個別ダウンロードをお試しください。', 'error');
-      return;
-    }
-    const zip = new JSZip();
-    const folder = zip.folder('tegaki-svg');
-    generatedChars.forEach(item=>{
-      const fname = 'character_' + String(item.index).padStart(3,'0') + '.svg';
-      folder.file(fname, item.svg);
-    });
-    const blob = await zip.generateAsync({type:'blob'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'tegaki-svg.zip';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-
-})();
+log("① 文字リストJSON → ② 原稿写真 → ③ グリッド設定 → ④ 4隅クリック の順に進めてください");
 </script>
 </body>
 </html>
