@@ -548,7 +548,7 @@
     }
     cctx.putImageData(cImgData, 0, 0);
 
-    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingEnabled = false;
     octx.drawImage(crop, 0, 0, box.w, box.h, dx, dy, drawW, drawH);
     return out;
   }
@@ -564,6 +564,7 @@
       pathomit: 8,
       numberofcolors: 2,
       colorsampling: 0,
+      colorquantcycles: 1,   // keep the supplied black/white palette from drifting toward gray
       pal: [ {r:0,g:0,b:0,a:255}, {r:255,g:255,b:255,a:255} ],
       scale: 1,
       roundcoords: 1,
@@ -574,22 +575,51 @@
     return extractInkPath(svgstring, canvas.width, canvas.height, color);
   }
 
+  // Picks out only the "ink" (dark) path(s) from ImageTracer's output and discards
+  // the background/white path(s). Rather than string-matching an expected color
+  // (which breaks if ImageTracer's k-means quantization drifts the black cluster
+  // toward gray), this parses each path's actual fill color, computes luminance,
+  // and keeps whichever fill group is darkest.
+  function parseFillColor(str){
+    if(!str) return null;
+    let m = str.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if(m) return [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+    m = str.match(/#([0-9a-f]{6})/i);
+    if(m){
+      const hex = m[1];
+      return [parseInt(hex.substr(0,2),16), parseInt(hex.substr(2,2),16), parseInt(hex.substr(4,2),16)];
+    }
+    if(/black/i.test(str)) return [0,0,0];
+    if(/white/i.test(str)) return [255,255,255];
+    return null;
+  }
+
   function extractInkPath(svgstring, w, h, color){
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgstring, 'image/svg+xml');
     const paths = Array.from(doc.querySelectorAll('path'));
-    const inkPaths = paths.filter(p=>{
-      const style = (p.getAttribute('style')||'') + (p.getAttribute('fill')||'');
-      return /rgb\(0,\s*0,\s*0\)|#000000|fill:black/i.test(style) || (!/rgb\(255|#fff/i.test(style));
-    });
-    let d = inkPaths.map(p=>p.getAttribute('d')).filter(Boolean).join(' ');
-    if(!d){
-      // fallback: use all paths except pure-white ones
-      d = paths.filter(p=>{
-        const style=(p.getAttribute('style')||'');
-        return !/rgb\(255,\s*255,\s*255\)/i.test(style);
-      }).map(p=>p.getAttribute('d')).join(' ');
+    if(paths.length === 0){
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'"></svg>';
     }
+
+    const byFill = new Map(); // fillKey -> {luminance, ds:[]}
+    paths.forEach(p=>{
+      const raw = (p.getAttribute('fill') || p.getAttribute('style') || '');
+      const rgb = parseFillColor(raw) || [128,128,128];
+      const luminance = 0.299*rgb[0] + 0.587*rgb[1] + 0.114*rgb[2];
+      const key = raw || 'unknown';
+      if(!byFill.has(key)) byFill.set(key, {luminance, ds:[]});
+      const d = p.getAttribute('d');
+      if(d) byFill.get(key).ds.push(d);
+    });
+
+    // ink = the darkest fill group present
+    let inkEntry = null;
+    for(const entry of byFill.values()){
+      if(!inkEntry || entry.luminance < inkEntry.luminance) inkEntry = entry;
+    }
+    const d = inkEntry ? inkEntry.ds.join(' ') : '';
+
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'">'
       + '<path d="'+d+'" fill="'+color+'"/></svg>';
   }
